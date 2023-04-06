@@ -1,18 +1,18 @@
-using ModelingToolkit
-using DifferentialEquations: solve
-using CairoMakie
-using Latexify
+####################################################################
+# Modèle de contamination du sol
+####################################################################
 
 ##################################
 # Configuration
 ##################################
+using ModelingToolkit
+using DifferentialEquations: solve
+using CairoMakie
+using Latexify
+import JLD
 
-# Configuration générale des figures
+# Configuration des figures
 CairoMakie.activate!(; px_per_unit=2)
-
-# Paramètres de la simulation
-## Etendue temporelle de la simulation
-time_max = 500.0
 
 ##################################
 # Définition
@@ -39,9 +39,13 @@ time_max = 500.0
 ## K: capacité de support pour les plantes [K]=
 @parameters θ=0.0 μ=0.0 a=0.2 ϵ=0.6 b=1e-1 γ_H=5e-2 m_P=0.08 m_H=0.08 r=0.2 K=10
 
-# Compartiments au temps initial 
-# [C(0), C_P(0), C_H(0), P(0), H(0)]
-u0 = [1, 0, 0, 1, 1]
+# Paramètres de la simulation
+
+## Compartiments au temps initial: [C(0), C_P(0), C_H(0), P(0), H(0)]
+sim_init_conditions = [1, 0, 0, 1, 1]
+
+## Etendue temporelle
+sim_time_max = 500.0
 
 # Création d'un opérateur de derivée
 D = Differential(t)
@@ -65,8 +69,8 @@ mortalite_herbivore = m_H*H
 ## Mortalité des herbivore due a la présence de contaminant dans leur biomasse
 mortalite_herbivore_cont = γ_H * (C_H/H) * H
 
-# Définition du système d'équations differentielles
-sir_equations = [
+# Système d'équations differentielles
+model_equations = [
     # Variation du contaminant dans le sol
     D(C) ~ contamination - absorption_plante + mortalite_plante * (C_P/P) + mortalite_herbivore_cont * (C_H/H) + mortalite_herbivore * (C_H/H),
     # Variation du contaminant dans la biomasse des plantes
@@ -84,21 +88,21 @@ sir_equations = [
 ##################################
 
 # Construire une représentation formelle du système ODE
-@named sir_system = ODESystem(sir_equations)
+@named model_system = ODESystem(model_equations)
 
 # Créer un problème ODE a résoudre numériquement
 # (système, valeurs initiales, temps)
-prob = ODEProblem(sir_system, u0, (0.0, time_max))
+prob = ODEProblem(model_system, sim_init_conditions, (0.0, sim_time_max))
 
 # Résoudre le système ODE
-sol = solve(prob, saveat=0:1:time_max)
+sol = solve(prob, saveat=0:1:sim_time_max)
 
 ##################################
 # Affichage des résultats
 ##################################
 
 # Afficher le système d'équations différentielles
-Latexify.latexify(sir_equations) |> render
+Latexify.latexify(model_equations) |> render
 
 # Création d'une figure
 fig = Figure(; resolution=(1000,500))
@@ -106,18 +110,18 @@ fig = Figure(; resolution=(1000,500))
 # Figure 1: axes
 timecourse_population = Axis(fig[1,1]; xlabel="Time", ylabel="Population")
 timecourse_contaminant = Axis(fig[1,2]; xlabel="Time", ylabel="Contaminant")
-phaseportrait = Axis(fig[1,3]; xlabel="Plantes", ylabel="Herbivores")
+phaseportrait = Axis(fig[1,3]; xlabel="Plants", ylabel="Herbivores")
 
 # Figure 1a: Évolution dans le temps
 # de la biomasse de Plantes et d'Herbivores
-lines!(timecourse_population, sol[t], sol[P], label="Plantes", color=:green)
+lines!(timecourse_population, sol[t], sol[P], label="Plants", color=:green)
 lines!(timecourse_population, sol[t], sol[H], label="Herbivores", color=:red)
 
 # Figure 1b : Évolution dans le temps 
 # de la quantité de contaminant 
 # dans l'environnement, les plantes et les herbivores 
-lines!(timecourse_contaminant, sol[t], sol[C], label="Environnement", color=:blue)
-lines!(timecourse_contaminant, sol[t], sol[C_P], label="Plantes", color=:green)
+lines!(timecourse_contaminant, sol[t], sol[C], label="Environment", color=:blue)
+lines!(timecourse_contaminant, sol[t], sol[C_P], label="Plants", color=:green)
 lines!(timecourse_contaminant, sol[t], sol[C_H], label="Herbivores", color=:red)
 
 # Figure 1c : 
@@ -141,9 +145,25 @@ tightlimits!(phaseportrait)
 # Afficher la figure
 current_figure()
 
-
 ##################################
 # Sauvegarde des résultats
 ##################################
 
-save("systeme.png", current_figure())
+# Identifiant de la simulation courante
+sim_identifier = "$(hash(model_equations))"
+
+# Emplacement de la sauvegarde
+ result_path = joinpath("output", sim_identifier)
+
+# Création du dossier au besoin
+if !ispath(result_path)
+    mkpath(result_path)
+end
+
+# Sauvegarde des figures
+fig_path = joinpath(result_path, "overview.png")
+CairoMakie.save(fig_path, current_figure())
+
+# Sauvegarde des données de simulation
+jld_path = joinpath(result_path, "model.jld")
+#JLD.save(jld_path, "model", model_equations)
