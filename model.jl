@@ -10,6 +10,7 @@ using DifferentialEquations: solve
 using CairoMakie
 using Latexify
 import JLD
+import CSV
 
 # Configuration des figures
 CairoMakie.activate!(; px_per_unit=2)
@@ -52,15 +53,19 @@ D = Differential(t)
 
 # Processus modélisés
 
-## Processus de contamination du sol (apport, export)
+## Processus de contamination du sol
+## Apport - Export
 contamination = θ - μ*C
 ## Absorption du contaminant par les plantes
+## Choix de modélisation: L'absorption dépend du métabolisme des plantes
 absorption_plante = b*P*C
 ## Croissance de la biomasse des plantes
+## Choix de modélisation: croissance logistique
 croissance_plante = r*P*(1 - P/K)
 ## Prédation des plantes par les herbivores
+## Choix de modélisation: action de masse
 predation = a*P*H
-## Conversion incomplète de la biomasse des plantes mangées en biomasse d'herbivores
+## Conversion de la biomasse de plantes ingérée en biomasse d'herbivores
 conversion = ϵ*predation
 ## Mortalité naturelle des plantes
 mortalite_plante = m_P*P
@@ -100,9 +105,6 @@ sol = solve(prob, saveat=0:1:sim_time_max)
 ##################################
 # Affichage des résultats
 ##################################
-
-# Afficher le système d'équations différentielles
-Latexify.latexify(model_equations) |> render
 
 # Création d'une figure
 fig = Figure(; resolution=(1000,500))
@@ -149,21 +151,35 @@ current_figure()
 # Sauvegarde des résultats
 ##################################
 
+output_folder="output"
+
+# Création du dossier de sortie des résultats
+if ~isdir(output_folder)
+    mkdir(output_folder)
+end
+
 # Identifiant de la simulation courante
 sim_identifier = "$(hash(model_equations))"
 
 # Emplacement de la sauvegarde
- result_path = joinpath("output", sim_identifier)
+ result_path = joinpath(output_folder, sim_identifier)
 
 # Création du dossier au besoin
 if !ispath(result_path)
     mkpath(result_path)
 end
 
-# Sauvegarde des figures
-fig_path = joinpath(result_path, "overview.png")
-CairoMakie.save(fig_path, current_figure())
 
-# Sauvegarde des données de simulation
-jld_path = joinpath(result_path, "model.jld")
-#JLD.save(jld_path, "model", model_equations)
+# Sauvegarde du modèle
+model_path = joinpath(result_path, "model.png")
+Latexify.latexify(model_equations) |> render
+CairoMakie.save(model_path, current_figure())
+
+# Sauvegarde des paramètres
+simulation_parameters = (theta=θ, mu=μ, a=a, epsilon=ϵ, b=b, gamma_H=γ_H, m_P=m_P, m_H=m_H, r=r, K=K)
+param_path = joinpath(result_path, "parameters.csv")
+CSV.write(param_path, simulation_parameters)
+
+# Sauvegarde des resultats
+fig_path = joinpath(result_path, "results_overview.png")
+CairoMakie.save(fig_path, current_figure())
