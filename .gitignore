@@ -23,4 +23,8 @@ docs/site/
 # environment.
 Manifest.toml
 
+# local files for VS code
 .vscode/*
+
+# local files for the model
+tmp/
